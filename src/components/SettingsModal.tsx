@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { useState, useEffect } from 'react';
+import { XMarkIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 interface UserSettings {
   username: string;
@@ -7,9 +7,18 @@ interface UserSettings {
   theme: 'light' | 'dark' | 'system';
 }
 
+interface ModelConfig {
+  id: string;
+  name: string;
+  provider: string;
+  description: string;
+  apiKeyPlaceholder: string;
+  source: 'env' | 'browser';
+  isActive: boolean;
+}
+
 interface SettingsModalProps {
   isOpen: boolean;
-  apiKey: string;
   setApiKey: (key: string) => void;
   model: string;
   setModel: (model: string) => void;
@@ -21,7 +30,6 @@ interface SettingsModalProps {
 
 export default function SettingsModal({
   isOpen,
-  apiKey,
   setApiKey,
   model,
   setModel,
@@ -32,10 +40,56 @@ export default function SettingsModal({
 }: SettingsModalProps) {
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationError, setVerificationError] = useState<string | null>(null);
-  const [expandedBrowserKey, setExpandedBrowserKey] = useState(false);
   const [tempApiKey, setTempApiKey] = useState('');
   const [showClearConfirmation, setShowClearConfirmation] = useState(false);
   const [showAddModel, setShowAddModel] = useState(false);
+  const [showModelActions, setShowModelActions] = useState<string | null>(null);
+  const [addedModels, setAddedModels] = useState<ModelConfig[]>(() => {
+    // Initialize with env model if available
+    const initialModels: ModelConfig[] = [];
+    if (hasEnvApiKey) {
+      initialModels.push({
+        id: 'gpt-3.5-turbo',
+        name: 'GPT-3.5 Turbo',
+        provider: 'openai',
+        description: 'Fast and efficient for most tasks',
+        apiKeyPlaceholder: 'Enter your OpenAI API key for GPT-3.5',
+        source: 'env',
+        isActive: true  // Env model is active by default if available
+      });
+    }
+    return initialModels;
+  });
+
+  const handleModelActivate = (modelId: string) => {
+    setAddedModels(prevModels => 
+      prevModels.map(m => ({
+        ...m,
+        isActive: m.id === modelId
+      }))
+    );
+    setModel(modelId);
+    setShowModelActions(null);
+  };
+
+  // Effect to handle model activation on mount
+  useEffect(() => {
+    if (addedModels.length > 0) {
+      // If env model exists, it should be active
+      if (hasEnvApiKey) {
+        const envModel = addedModels.find(m => m.source === 'env');
+        if (envModel) {
+          handleModelActivate(envModel.id);
+        }
+      } else {
+        // If no env model, activate the first available model
+        const firstModel = addedModels[0];
+        if (firstModel) {
+          handleModelActivate(firstModel.id);
+        }
+      }
+    }
+  }, []);
 
   if (!isOpen) return null;
 
@@ -48,15 +102,64 @@ export default function SettingsModal({
       apiKeyPlaceholder: 'Enter your OpenAI API key for GPT-3.5'
     },
     { 
-      id: 'gpt-4',
-      name: 'GPT-4',
+      id: 'gpt-4o',
+      name: 'GPT-4o',
       provider: 'openai',
       description: 'Most capable model, better at complex tasks',
-      apiKeyPlaceholder: 'Enter your OpenAI API key for GPT-4'
+      apiKeyPlaceholder: 'Enter your OpenAI API key for GPT-4o'
     },
   ];
 
-  const selectedModel = models.find(m => m.id === model);
+  const handleModelDelete = (modelId: string) => {
+    setAddedModels(prevModels => {
+      const newModels = prevModels.filter(m => m.id !== modelId);
+      
+      // If we're deleting the active model
+      if (model === modelId) {
+        // If env model exists, activate it
+        const envModel = newModels.find(m => m.source === 'env');
+        if (envModel) {
+          setModel(envModel.id);
+          return newModels.map(m => ({
+            ...m,
+            isActive: m.id === envModel.id
+          }));
+        }
+        // Otherwise activate the first available model
+        if (newModels.length > 0) {
+          setModel(newModels[0].id);
+          return newModels.map((m, index) => ({
+            ...m,
+            isActive: index === 0
+          }));
+        }
+      }
+      
+      return newModels;
+    });
+    setShowModelActions(null);
+  };
+
+  const handleAddNewModel = (modelId: string, apiKey: string) => {
+    const modelToAdd = models.find(m => m.id === modelId);
+    if (modelToAdd) {
+      setAddedModels(prevModels => [
+        ...prevModels.map(m => ({
+          ...m,
+          isActive: false  // Deactivate all existing models
+        })),
+        {
+          ...modelToAdd,
+          source: 'browser',
+          isActive: true  // Make the new model active
+        }
+      ]);
+      setModel(modelId);
+      setApiKey(apiKey);
+      setShowAddModel(false);
+      setTempApiKey('');
+    }
+  };
 
   const handleUsernameChange = (username: string) => {
     setUserSettings({ ...userSettings, username });
@@ -99,10 +202,6 @@ export default function SettingsModal({
         setIsVerifying(false);
       }
     }
-  };
-
-  const handleDeactivate = () => {
-    setApiKey('');
   };
 
   const handleClearData = () => {
@@ -203,122 +302,65 @@ export default function SettingsModal({
           <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
             <h2 className="text-lg font-medium text-gray-200 mb-4">Model Settings</h2>
             <div className="space-y-4">
-              {/* Environment Model Status */}
-              <div className={`border rounded-xl p-4 ${
-                hasEnvApiKey 
-                  ? 'bg-gray-800/50 border-green-600/30' 
-                  : 'bg-gray-800/50 border-gray-700'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <span className={`text-sm font-medium ${
-                    hasEnvApiKey ? 'text-green-400' : 'text-gray-300'
-                  }`}>
-                    Local .env - {selectedModel?.name}
-                  </span>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    hasEnvApiKey 
-                      ? 'bg-green-900/30 text-green-400 border border-green-600/30' 
-                      : 'bg-gray-800 text-gray-400 border border-gray-700'
-                  }`}>
-                    {hasEnvApiKey ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Browser Storage API Key Section */}
-              {apiKey && (
-                <div 
+              {/* List of Added Models */}
+              {addedModels.map((m) => (
+                <div
+                  key={m.id}
                   className={`border rounded-xl p-4 transition-all ${
-                    expandedBrowserKey
-                      ? 'bg-amber-900/20 border-amber-600/30' 
-                      : 'bg-gray-800/50 border-gray-700 cursor-pointer hover:bg-gray-800'
+                    m.isActive
+                      ? 'bg-green-900/20 border-green-600/30'
+                      : 'bg-amber-900/20 border-amber-600/30'
                   }`}
-                  onClick={() => !expandedBrowserKey && setExpandedBrowserKey(true)}
                 >
-                  {expandedBrowserKey ? (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-lg font-medium text-amber-400">Edit Connection</h3>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setExpandedBrowserKey(false);
-                          }}
-                          className="text-amber-400 hover:text-amber-300"
-                        >
-                          <XMarkIcon className="h-5 w-5" />
-                        </button>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-amber-400 mb-2">
-                          API Key
-                        </label>
-                        <input
-                          type="password"
-                          value={tempApiKey}
-                          onChange={(e) => handleApiKeyChange(e.target.value)}
-                          placeholder="Enter your OpenAI API key"
-                          className={`${inputClasses} ${verificationError ? 'border-red-500' : ''}`}
-                        />
-                        {isVerifying && (
-                          <p className="mt-2 text-sm text-blue-400">
-                            Verifying API key...
-                          </p>
-                        )}
-                        {verificationError && (
-                          <p className="mt-2 text-sm text-red-400">
-                            {verificationError}
-                          </p>
-                        )}
-                        <p className="mt-2 text-sm text-gray-400">
-                          Get your API key from{' '}
-                          <a
-                            href="https://platform.openai.com/account/api-keys"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 underline"
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <span className={`text-sm font-medium ${
+                        m.isActive ? 'text-green-400' : 'text-amber-400'
+                      }`}>
+                        {m.source === 'env' ? `Local .env - ${m.name}` : m.name}
+                      </span>
+                      <p className="text-xs text-gray-400">{m.description}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {showModelActions === m.id ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleModelActivate(m.id)}
+                            className={`px-3 py-1 rounded-lg text-xs font-medium ${
+                              m.isActive
+                                ? 'bg-green-900/30 text-green-400 border border-green-600/30'
+                                : 'bg-amber-900/30 text-amber-400 border border-amber-600/30 hover:bg-amber-900/40'
+                            }`}
                           >
-                            OpenAI&apos;s platform
-                          </a>
-                        </p>
-                      </div>
-
-                      <div className="flex justify-end gap-3 mt-6">
+                            {m.isActive ? 'Active' : 'Activate'}
+                          </button>
+                          {m.source === 'browser' && (
+                            <button
+                              onClick={() => handleModelDelete(m.id)}
+                              className="p-1 rounded-lg text-red-400 hover:bg-red-900/20"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      ) : (
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeactivate();
-                          }}
-                          className="px-4 py-2 bg-gray-800 text-amber-400 text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors border border-amber-600/30"
+                          onClick={() => setShowModelActions(m.id)}
+                          className={`px-3 py-1 rounded-lg text-xs font-medium ${
+                            m.isActive
+                              ? 'bg-green-900/30 text-green-400 border border-green-600/30'
+                              : 'bg-amber-900/30 text-amber-400 border border-amber-600/30'
+                          }`}
                         >
-                          Delete Connection
+                          {m.isActive ? 'Active' : 'Connected'}
                         </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setExpandedBrowserKey(false);
-                          }}
-                          className="px-4 py-2 bg-amber-600/20 text-amber-400 text-sm font-medium rounded-lg hover:bg-amber-600/30 transition-colors border border-amber-600/30"
-                        >
-                          Save Changes
-                        </button>
-                      </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-amber-400">
-                        Local Storage - {selectedModel?.name}
-                      </span>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-900/30 text-amber-400 border border-amber-600/30">
-                        Active
-                      </span>
-                    </div>
-                  )}
+                  </div>
                 </div>
-              )}
+              ))}
 
-              {/* Add New Model Button - Now always visible */}
+              {/* Add New Model Button */}
               <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6">
                 {!showAddModel ? (
                   <button
@@ -363,11 +405,6 @@ export default function SettingsModal({
                           ))}
                         </select>
                       </div>
-                      {selectedModel && (
-                        <p className="mt-2 text-sm text-gray-400">
-                          {selectedModel.description}
-                        </p>
-                      )}
                     </div>
 
                     <div>
@@ -378,7 +415,7 @@ export default function SettingsModal({
                         type="password"
                         value={tempApiKey}
                         onChange={(e) => handleApiKeyChange(e.target.value)}
-                        placeholder={selectedModel?.apiKeyPlaceholder}
+                        placeholder="Enter your OpenAI API key"
                         className={`${inputClasses} ${verificationError ? 'border-red-500' : ''}`}
                       />
                       {isVerifying && (
@@ -391,24 +428,6 @@ export default function SettingsModal({
                           {verificationError}
                         </p>
                       )}
-                      <p className="mt-2 text-sm text-gray-400">
-                        Get your API key from{' '}
-                        <a
-                          href="https://platform.openai.com/account/api-keys"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300 underline"
-                        >
-                          OpenAI&apos;s platform
-                        </a>
-                      </p>
-                    </div>
-
-                    <div className="bg-amber-900/20 border border-amber-600/30 rounded-lg p-3">
-                      <p className="text-sm text-amber-400">
-                        ⚠️ Security Notice: This API key will be stored in the browser&apos;s local storage. 
-                        For better security, consider using an environment variable instead.
-                      </p>
                     </div>
 
                     <div className="flex justify-end gap-3">
@@ -423,12 +442,7 @@ export default function SettingsModal({
                         Cancel
                       </button>
                       <button
-                        onClick={() => {
-                          if (tempApiKey && !verificationError) {
-                            setApiKey(tempApiKey);
-                            setShowAddModel(false);
-                          }
-                        }}
+                        onClick={() => handleAddNewModel(model, tempApiKey)}
                         disabled={!tempApiKey || !!verificationError || isVerifying}
                         className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                           !tempApiKey || !!verificationError || isVerifying

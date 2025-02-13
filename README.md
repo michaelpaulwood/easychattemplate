@@ -1,6 +1,53 @@
 # Easy Chat Template
 
-Are you a developer looking to experiment with AI models or build your own AI chat application? This template is your perfect starting point!
+A modern chat interface for interacting with AI models.
+
+## Available Models
+
+Currently, the application supports two OpenAI models:
+
+1. **GPT-3.5 Turbo** (`gpt-3.5-turbo`)
+
+   - Fast and efficient for most tasks
+   - Default model when using environment API key
+
+2. **GPT-4o** (`gpt-4o`)
+   - Most capable model for complex tasks
+   - Can be added as an additional model
+
+## Setting Up
+
+There are two ways to add your API key:
+
+### Option 1: Using Environment Variables
+
+1. Create a `.env` file in the root directory
+2. Add your OpenAI API key:
+
+```env
+OPENAI_API_KEY=your-api-key-here
+OPENAI_MODEL=gpt-3.5-turbo  # or gpt-4o
+```
+
+### Option 2: Adding Models in the App
+
+1. Click the settings icon in the chat interface
+2. Click "Add New Model"
+3. Select your desired model (GPT-3.5 Turbo or GPT-4o)
+4. Enter your OpenAI API key
+5. Click "Add Model"
+
+## Running the Application
+
+```bash
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
+```
+
+The application will be available at `http://localhost:3000`
 
 ## Why Choose This Template?
 
@@ -43,51 +90,6 @@ This template provides everything you need to start building with AI, wrapped in
 - ⚙️ User settings management
 - 🎨 Tailwind CSS for styling
 - 📝 TypeScript for type safety
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- npm or yarn
-- OpenAI API key
-
-### Installation
-
-1. Clone this repository:
-
-```bash
-git clone https://github.com/yourusername/easychattemplate.git
-cd easychattemplate
-```
-
-2. Install dependencies:
-
-```bash
-npm install
-# or
-yarn install
-```
-
-3. Create a `.env` file in the root directory:
-
-```env
-# Required: Your OpenAI API key
-OPENAI_API_KEY=your_api_key_here
-
-# Optional: Default model (defaults to gpt-3.5-turbo if not set)
-DEFAULT_MODEL=gpt-3.5-turbo
-```
-
-4. Start the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-```
-
-5. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Configuration
 

@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
+interface APIError extends Error {
+  response?: {
+    status: number;
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const { message, apiKey, model } = await request.json();
@@ -13,9 +19,15 @@ export async function POST(request: Request) {
       apiKey: apiKey || process.env.OPENAI_API_KEY,
     });
 
+    // Map model IDs to actual OpenAI model names
+    const modelMap = {
+      'gpt-3.5-turbo': 'gpt-3.5-turbo',
+      'gpt-4o': 'gpt-4'  // Map gpt-4o to actual gpt-4
+    };
+
     try {
       const response = await openai.chat.completions.create({
-        model: model || process.env.OPENAI_MODEL || "gpt-3.5-turbo",
+        model: modelMap[model as keyof typeof modelMap] || process.env.OPENAI_MODEL || "gpt-3.5-turbo",
         messages: [
           { role: "system", content: "You are a helpful assistant." },
           { role: "user", content: message }
@@ -27,10 +39,11 @@ export async function POST(request: Request) {
       return NextResponse.json({
         reply: response.choices[0].message.content
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('OpenAI API Error:', error);
       
-      if (error.response?.status === 401) {
+      const apiError = error as APIError;
+      if (apiError.response?.status === 401) {
         return NextResponse.json(
           { error: 'Invalid API key. Please check your OpenAI API key configuration.' },
           { status: 401 }
@@ -38,8 +51,8 @@ export async function POST(request: Request) {
       }
 
       return NextResponse.json(
-        { error: error.message || 'Error communicating with OpenAI API' },
-        { status: error.response?.status || 500 }
+        { error: apiError.message || 'Error communicating with OpenAI API' },
+        { status: apiError.response?.status || 500 }
       );
     }
   } catch (error) {

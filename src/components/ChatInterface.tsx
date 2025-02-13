@@ -53,59 +53,54 @@ export default function ChatInterface({ apiKey, model, theme, hasEnvApiKey }: Ch
 
   // Initialize welcome message
   useEffect(() => {
-    setMessages([{
+    const welcomeMessage = {
       id: 'welcome',
-      role: 'assistant',
+      role: 'assistant' as const,
       content: hasActiveKey 
         ? "Hello! 👋 How can I help you today?"
         : "Please add your API key in settings to start chatting.",
-      timestamp: Date.now()
-    }]);
-  }, [hasActiveKey]);
+      timestamp: Date.now(),
+      model: hasEnvApiKey ? 'gpt-3.5-turbo' : undefined
+    };
+    setMessages([welcomeMessage]);
+  }, [hasActiveKey, hasEnvApiKey]);
 
   const handleSendMessage = async (content: string) => {
     if (!content.trim()) return;
 
     const userMessage: Message = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: Date.now().toString(),
       role: 'user',
-      content: content.trim(),
-      timestamp: Date.now(),
+      content,
+      timestamp: Date.now()
     };
 
-    setMessages((prev) => [...prev, userMessage]);
-    setError(null);
+    setMessages(prev => [...prev, userMessage]);
     setIsLoading(true);
+    setError(null);
 
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: content,
-          apiKey,
-          model,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: content, apiKey, model }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to get response');
-      }
-
       const data = await response.json();
-      
-      const assistantMessage: Message = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        role: 'assistant',
-        content: data.reply || data.message || 'No response from AI',
-        timestamp: Date.now(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      if (response.ok) {
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.reply,
+          timestamp: Date.now(),
+          model: model  // Always include the current model for assistant messages
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+      } else {
+        setError(data.error || 'Failed to get response');
+      }
+    } catch {
+      setError('Failed to send message');
     } finally {
       setIsLoading(false);
     }
@@ -138,53 +133,66 @@ export default function ChatInterface({ apiKey, model, theme, hasEnvApiKey }: Ch
           paddingBottom: `${inputHeight + 24}px`
         }}
       >
-        {!hasActiveKey && (
+        {!hasActiveKey ? (
           <div className="flex justify-center items-center h-full">
             <div className="text-center p-4 rounded-lg bg-yellow-50 text-yellow-800">
               <p>Please add your API key in settings to start chatting.</p>
+              <p className="text-sm mt-2 text-yellow-600">No models available.</p>
             </div>
           </div>
-        )}
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex items-start space-x-4 ${
-              message.role === 'user' ? 'justify-end' : 'justify-start'
-            }`}
-          >
+        ) : (
+          messages.map((message) => (
             <div
-              className={`relative group max-w-[85%] p-4 rounded-2xl cursor-pointer transition-all hover:shadow-lg ${
-                message.role === 'user'
-                  ? `${theme === 'dark' ? 'bg-blue-600/20 text-blue-100' : 'bg-blue-100 text-blue-900'}`
-                  : `${theme === 'dark' ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`
-              } ${copiedMessageId === message.id ? (
-                theme === 'dark' 
-                  ? 'ring-1 ring-white/30 bg-opacity-90' 
-                  : 'ring-1 ring-gray-900/30 bg-opacity-90'
-              ) : ''}`}
-              onClick={() => copyToClipboard(message.content, message.id)}
+              key={message.id}
+              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <ClipboardDocumentIcon className={`h-4 w-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`} />
-              </div>
-              {copiedMessageId === message.id && (
-                <div className={`absolute -top-8 left-1/2 transform -translate-x-1/2 px-2 py-1 text-xs rounded-full backdrop-blur-sm ${
-                  theme === 'dark'
-                    ? 'bg-white/10 text-white/90 border border-white/20'
-                    : 'bg-gray-900/10 text-gray-900/90 border border-gray-900/20'
-                }`}>
-                  Copied!
+              <div 
+                onClick={() => copyToClipboard(message.content, message.id)}
+                className={`relative group max-w-[80%] cursor-pointer transition-all ${
+                  message.role === 'user'
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : theme === 'dark' 
+                      ? 'bg-gray-800 text-gray-100 hover:bg-gray-700' 
+                      : 'bg-white text-gray-900 hover:bg-gray-50'
+                } p-3 rounded-xl ring-1 ring-transparent hover:ring-opacity-50 ${
+                  message.role === 'user' 
+                    ? 'hover:ring-blue-400' 
+                    : theme === 'dark'
+                      ? 'hover:ring-gray-600'
+                      : 'hover:ring-gray-300'
+                }`}
+              >
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-grow whitespace-pre-wrap">{message.content}</div>
+                    <div className={`opacity-0 group-hover:opacity-100 transition-opacity ml-2 ${
+                      copiedMessageId === message.id ? 'text-green-400' : message.role === 'user' ? 'text-white/70' : 'text-gray-400'
+                    }`}>
+                      {copiedMessageId === message.id ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      ) : (
+                        <ClipboardDocumentIcon className="h-4 w-4" />
+                      )}
+                    </div>
+                  </div>
+                  <div className={`text-[10px] ${message.role === 'assistant' && message.model ? 'flex items-center gap-2' : ''} ${
+                    message.role === 'user' ? 'text-white/50' : theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                  }`}>
+                    {new Date(message.timestamp).toLocaleTimeString()}
+                    {message.role === 'assistant' && message.model && (
+                      <>
+                        <span className="opacity-50">•</span>
+                        <span>{message.model === 'gpt-4o' ? 'GPT-4O' : message.model}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
-              )}
-              <p className="text-sm font-normal whitespace-pre-wrap">{message.content}</p>
-              <span className={`text-[10px] ${
-                theme === 'dark' ? 'text-gray-500' : 'text-gray-400'
-              } mt-1 block`}>
-                {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
         {isLoading && (
           <div className="flex justify-start">
             <div className={`p-4 rounded-xl ${
